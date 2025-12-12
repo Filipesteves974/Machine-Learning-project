@@ -17,13 +17,16 @@ leakage.
 from dataclasses import dataclass
 from typing import List, Optional
 
-import numpy as np 
+import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import KFold, cross_val_score
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, RobustScaler, TargetEncoder
+from sklearn.preprocessing import OneHotEncoder, RobustScaler
+
+from category_encoders import TargetEncoder
 
 from functions import correct_missing_letters, impute_missing_values_hybrid, normalize_data
 
@@ -242,4 +245,45 @@ def build_pipeline(config: PipelineConfig | None = None) -> Pipeline:
     return pipeline
 
 
-__all__ = ["build_pipeline", "PipelineConfig"]
+def cross_validate_pipeline(
+    X: pd.DataFrame,
+    y: pd.Series,
+    config: PipelineConfig | None = None,
+    cv: int = 5,
+) -> dict:
+    """
+    Executes k-fold CV (default 5) with the full pipeline and returns MAE stats.
+
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Feature matrix (raw features as in the dataset).
+    y : pd.Series
+        Target vector on the desired scale (e.g. log(price)).
+    config : PipelineConfig, optional
+        Optional custom pipeline configuration.
+    cv : int
+        Number of folds for KFold (shuffle=True).
+    """
+    if config is None:
+        config = PipelineConfig()
+
+    pipeline = build_pipeline(config)
+    kfold = KFold(n_splits=cv, shuffle=True, random_state=config.random_state)
+    scores = cross_val_score(
+        pipeline,
+        X,
+        y,
+        cv=kfold,
+        scoring="neg_mean_absolute_error",
+        n_jobs=1,
+    )
+    mae_scores = -scores
+    return {
+        "mae_scores": mae_scores,
+        "mae_mean": mae_scores.mean(),
+        "mae_std": mae_scores.std(),
+    }
+
+
+__all__ = ["build_pipeline", "PipelineConfig", "cross_validate_pipeline"]
