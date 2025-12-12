@@ -22,11 +22,8 @@ import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import KFold, cross_val_score
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, RobustScaler
-
-from category_encoders import TargetEncoder
+from sklearn.preprocessing import OneHotEncoder, RobustScaler, TargetEncoder
 
 from functions import correct_missing_letters, impute_missing_values_hybrid, normalize_data
 
@@ -176,14 +173,32 @@ class HybridImputerTransformer(BaseEstimator, TransformerMixin):
         self.create_flags = create_flags
 
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "HybridImputerTransformer":
-        self.columns_ = X.columns.tolist()
+        self._train_reference = X.copy()
+        X_tr_clean, _, _ = impute_missing_values_hybrid(
+            self._train_reference.copy(),
+            X.copy(),
+            X.copy(),
+            create_flags=self.create_flags,
+        )
+        self._train_imputed = X_tr_clean
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        X = X.copy()
-        X_clean, _, _ = impute_missing_values_hybrid(X, X.copy(), X.copy(), create_flags=self.create_flags)
-        # Ensure original column ordering is kept when possible
-        return X_clean
+        if not hasattr(self, "_train_reference"):
+            raise RuntimeError("HybridImputerTransformer must be fitted before calling transform.")
+
+        # When transforming new data, keep train reference constant so it learns only from train stats
+        _, X_val_clean, _ = impute_missing_values_hybrid(
+            self._train_reference.copy(),
+            X.copy(),
+            X.copy(),
+            create_flags=self.create_flags,
+        )
+        return X_val_clean
+
+    def fit_transform(self, X: pd.DataFrame, y: Optional[pd.Series] = None, **fit_params) -> pd.DataFrame:
+        self.fit(X, y)
+        return self._train_imputed.copy()
 
 
 @dataclass
@@ -219,7 +234,7 @@ def build_pipeline(config: PipelineConfig | None = None) -> Pipeline:
         transformers=[
             ("num", Pipeline([("scaler", RobustScaler())]), numerical_features),
             ("low_card", OneHotEncoder(handle_unknown="ignore"), low_card),
-            ("high_card", TargetEncoder(smooth=12), high_card),  # target encoding for Brand/model
+            ("high_card", TargetEncoder(smooth=12)),  # handles unseen labels gracefully
             ("pass", "passthrough", passthrough_cols),
         ],
         remainder="drop",
@@ -245,45 +260,4 @@ def build_pipeline(config: PipelineConfig | None = None) -> Pipeline:
     return pipeline
 
 
-def cross_validate_pipeline(
-    X: pd.DataFrame,
-    y: pd.Series,
-    config: PipelineConfig | None = None,
-    cv: int = 5,
-) -> dict:
-    """
-    Executes k-fold CV (default 5) with the full pipeline and returns MAE stats.
-
-    Parameters
-    ----------
-    X : pd.DataFrame
-        Feature matrix (raw features as in the dataset).
-    y : pd.Series
-        Target vector on the desired scale (e.g. log(price)).
-    config : PipelineConfig, optional
-        Optional custom pipeline configuration.
-    cv : int
-        Number of folds for KFold (shuffle=True).
-    """
-    if config is None:
-        config = PipelineConfig()
-
-    pipeline = build_pipeline(config)
-    kfold = KFold(n_splits=cv, shuffle=True, random_state=config.random_state)
-    scores = cross_val_score(
-        pipeline,
-        X,
-        y,
-        cv=kfold,
-        scoring="neg_mean_absolute_error",
-        n_jobs=1,
-    )
-    mae_scores = -scores
-    return {
-        "mae_scores": mae_scores,
-        "mae_mean": mae_scores.mean(),
-        "mae_std": mae_scores.std(),
-    }
-
-
-__all__ = ["build_pipeline", "PipelineConfig", "cross_validate_pipeline"]
+__all__ = ["build_pipeline", "PipelineConfig"]
