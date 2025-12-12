@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[23]:
+# In[1]:
 
 
 #general imports that we will need will almost always use - it is a good practice to import all libraries at the beginning of the notebook or script
@@ -69,7 +69,7 @@ np.random.seed(RSEED)
 
 # Transforms all data to fit the same criteria making it easier to work on.
 
-# In[24]:
+# In[2]:
 
 
 def normalize_data(x):
@@ -85,7 +85,7 @@ def normalize_data(x):
 
 # Function that automatically looks for the closest match on the valid list, therefore correcting the visible typos.
 
-# In[25]:
+# In[3]:
 
 
 def correct_missing_letters(value, valid_list, max_missing=2):
@@ -117,7 +117,7 @@ valid_list = []
 
 # Individually treats the outliers detected for each feature. Methods applied were Winsorization and removing by NaN placement
 
-# In[26]:
+# In[4]:
 
 
 def remove_outliers_smart_v3(X_train, X_val, X_test, y_train, y_val):
@@ -277,7 +277,7 @@ def remove_outliers_smart_v3(X_train, X_val, X_test, y_train, y_val):
 
 # Hybrid solution for filling in the missing values based on their statistical peers.
 
-# In[27]:
+# In[ ]:
 
 
 from sklearn.experimental import enable_iterative_imputer
@@ -287,7 +287,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
-def impute_missing_values_hybrid(X_train, X_val, X_test, create_flags=True):
+def impute_missing_values_hybrid(X_train, X_val, X_test):
     """
     Hybrid intelligent imputation:
     1. Simple categorical: model, Brand (rules + mode)
@@ -304,25 +304,7 @@ def impute_missing_values_hybrid(X_train, X_val, X_test, create_flags=True):
     print("HYBRID IMPUTATION PIPELINE")
     print("="*80)
     
-    # =========================================================================
-    # STEP 0: Create missing flags (BEFORE imputation)
-    # =========================================================================
-    if create_flags:
-        print("\n[CREATING MISSING FLAGS]")
-        cols_to_flag = ['model', 'Brand', 'year', 'engineSize', 'mileage', 
-                        'fuelType', 'transmission', 'mpg', 'tax', 'previousOwners',
-                        'has_damage', 'has_reported_damage']
-        
-        if 'paintQuality%' in X_tr.columns:
-            cols_to_flag.append('paintQuality%')
-        
-        for col in cols_to_flag:
-            if col in X_tr.columns:
-                X_tr[f'{col}_was_missing'] = X_tr[col].isna().astype(int)
-                X_v[f'{col}_was_missing'] = X_v[col].isna().astype(int)
-                X_te[f'{col}_was_missing'] = X_te[col].isna().astype(int)
-        
-        print(f"  Created {len([c for c in cols_to_flag if c in X_tr.columns])} missing flags")
+
     
     # =========================================================================
     # STEP 1: MODEL (global mode)
@@ -475,9 +457,9 @@ def impute_missing_values_hybrid(X_train, X_val, X_test, create_flags=True):
     # =========================================================================
     # STEP 3.5: BINARY FLAGS (has_damage, has_reported_damage)
     # =========================================================================
-    print("\n[3.5/6] BINARY FLAGS - has_damage, has_reported_damage")
+    print("\n[3.5/6] BINARY FLAGS - has_reported_damage")
     
-    for col in ['has_damage', 'has_reported_damage']:
+    for col in ['has_reported_damage']:
         if col in X_tr.columns:
             mode_val = X_tr[col].mode()[0] if len(X_tr[col].mode()) > 0 else 0
             n_missing_train = X_tr[col].isna().sum()
@@ -647,19 +629,13 @@ def impute_missing_values_hybrid(X_train, X_val, X_test, create_flags=True):
         print("\nColumns with remaining NaNs in Test:")
         print(X_te.isna().sum()[X_te.isna().sum() > 0])
     
-    if create_flags:
-        flag_cols = [col for col in X_tr.columns if col.endswith('_was_missing')]
-        print(f"\nFlags created: {len(flag_cols)} columns")
-        if flag_cols:
-            print(f"  Example: {flag_cols[:3]}")
-    
     return X_tr, X_v, X_te
 
 
 
 # Chi2 test for feature importance in categorical variables.
 
-# In[28]:
+# In[6]:
 
 
 def TestIndependence(X,y,var,alpha=0.05):        
@@ -675,7 +651,7 @@ def TestIndependence(X,y,var,alpha=0.05):
 
 # Spearman correlation map function.
 
-# In[29]:
+# In[7]:
 
 
 def cor_heatmap(cor):
@@ -686,7 +662,7 @@ def cor_heatmap(cor):
 
 # RFE
 
-# In[30]:
+# In[8]:
 
 
 def optimal_rfe(X, y, scoring='r2', cv=5, verbose=True):
@@ -730,7 +706,7 @@ def optimal_rfe(X, y, scoring='r2', cv=5, verbose=True):
 
 # Lasso importance grid
 
-# In[31]:
+# In[9]:
 
 
 def plot_importance(coef,name):
@@ -743,7 +719,7 @@ def plot_importance(coef,name):
 
 # Model evaluation functions
 
-# In[32]:
+# In[10]:
 
 
 def evaluate_model(model, X_train, X_val, y_train, y_val):
@@ -779,8 +755,91 @@ def evaluate_model_original_scale(model, X_train, X_val, y_train, y_val):
     print("-" * 60)
 
 
+# In[11]:
+
+
+def run_model(X, y, scaler=None, model=None, fill_method=None):
+    """
+    Train a model with optional preprocessing.
+    
+    Parameters:
+    - X: Features (will be copied to avoid modifying original)
+    - y: Target
+    - scaler: Scaler instance (e.g., StandardScaler()) or None for no scaling
+    - model: Model instance or None for LogisticRegression default
+    - fill_method: 'median', 'mean', or None for no filling
+    
+    Returns:
+    - model: Fitted model
+    - scaler: Fitted scaler (or None)
+    - fill_values: Dictionary of fill values (or None)
+    """
+    # Copy to avoid modifying original data
+    X_processed = X.copy()
+    
+    # Fill missing values - this function uses simple statistics from the training set but you can modify it to use more complex strategies
+    fill_values = None
+    if fill_method is not None:
+        if fill_method == 'function':
+            fill_values = impute_missing_values_hybrid(X_processed)
+        elif fill_method == 'mean':
+            fill_values = X_processed.mean()
+        X_processed = X_processed.fillna(fill_values)
+    
+    # Scale features
+    if scaler is not None:
+        X_processed = scaler.fit_transform(X_processed)
+    
+    # Use provided model or create default
+    if model is None:
+        model = RandomForestRegressor()
+    
+    # Fit the model
+    model.fit(X_processed, y)
+    
+    return model, scaler, fill_values
+
+
+# In[12]:
+
+
+def evaluate_model_rf_mae(X, y, model=None, scaler=None, fill_method=None):
+    """
+    Avalia um modelo RandomForestRegressor usando o Mean Absolute Error (MAE).
+    
+    Esta versão ASSUME que X e y JÁ ESTÃO PRÉ-PROCESSADOS (X_val_final, y_val_final).
+    Os parâmetros 'scaler' e 'fill_values' são mantidos na assinatura para 
+    compatibilidade, mas são ignorados no processamento interno.
+
+    Parameters:
+    - X: Features (Dados de validação já processados, e.g., X_val_final)
+    - y: Target (e.g., y_val)
+    - model: Modelo ajustado (Fitted RandomForestRegressor)
+    - scaler: Ignorado.
+    - fill_values: Ignorado.
+    
+    Returns:
+    - mae: Mean Absolute Error (Erro Absoluto Médio)
+    """
+    # 1. Copia dos dados (mantido por segurança, embora não haja modificação)
+    X_processed = X.copy()
+    
+    # 2. Imputação e Scaling SÃO IGNORADOS, pois os dados já estão processados
+    # if fill_values is not None: ...
+    # if scaler is not None: ...
+    
+    # 3. Fazer as previsões
+    y_pred = model.predict(X_processed)
+    
+    # 4. Calcular o MAE
+    # Nota: Assumindo que 'y' é o target na escala que se pretende (ex: log)
+    mae = mean_absolute_error(y, y_pred)
+    
+    return mae
+
+
 # In[ ]:
 
 
-# !jupyter nbconvert --to python functions.ipynb
+#!jupyter nbconvert --to python functions.ipynb
 
