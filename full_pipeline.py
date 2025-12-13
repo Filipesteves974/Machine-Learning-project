@@ -17,7 +17,7 @@ leakage.
 from dataclasses import dataclass
 from typing import List, Optional
 
-import numpy as np 
+import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
@@ -173,14 +173,32 @@ class HybridImputerTransformer(BaseEstimator, TransformerMixin):
         self.create_flags = create_flags
 
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> "HybridImputerTransformer":
-        self.columns_ = X.columns.tolist()
+        self._train_reference = X.copy()
+        X_tr_clean, _, _ = impute_missing_values_hybrid(
+            self._train_reference.copy(),
+            X.copy(),
+            X.copy(),
+            create_flags=self.create_flags,
+        )
+        self._train_imputed = X_tr_clean
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        X = X.copy()
-        X_clean, _, _ = impute_missing_values_hybrid(X, X.copy(), X.copy(), create_flags=self.create_flags)
-        # Ensure original column ordering is kept when possible
-        return X_clean
+        if not hasattr(self, "_train_reference"):
+            raise RuntimeError("HybridImputerTransformer must be fitted before calling transform.")
+
+        # When transforming new data, keep train reference constant so it learns only from train stats
+        _, X_val_clean, _ = impute_missing_values_hybrid(
+            self._train_reference.copy(),
+            X.copy(),
+            X.copy(),
+            create_flags=self.create_flags,
+        )
+        return X_val_clean
+
+    def fit_transform(self, X: pd.DataFrame, y: Optional[pd.Series] = None, **fit_params) -> pd.DataFrame:
+        self.fit(X, y)
+        return self._train_imputed.copy()
 
 
 @dataclass
@@ -216,7 +234,7 @@ def build_pipeline(config: PipelineConfig | None = None) -> Pipeline:
         transformers=[
             ("num", Pipeline([("scaler", RobustScaler())]), numerical_features),
             ("low_card", OneHotEncoder(handle_unknown="ignore"), low_card),
-            ("high_card", TargetEncoder(smooth=12), high_card),  # target encoding for Brand/model
+            ("high_card", TargetEncoder(smooth=12)),  # handles unseen labels gracefully
             ("pass", "passthrough", passthrough_cols),
         ],
         remainder="drop",
