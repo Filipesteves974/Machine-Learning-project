@@ -11,55 +11,40 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 import time
-
-# data partition
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import StratifiedKFold
-
-#filter methods
-# spearman 
-# chi-square
 import scipy.stats as stats
 from scipy.stats import chi2_contingency
-
-#wrapper methods
 from sklearn.linear_model import LinearRegression
 from sklearn.svm import SVC
 from sklearn.feature_selection import RFE
 from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import lasso_path, SGDRegressor
-
-
-# embedded methods
-from sklearn.linear_model import LassoCV
+from sklearn.linear_model import LassoCV, ElasticNet
 from sklearn.preprocessing import StandardScaler,RobustScaler
 from sklearn.preprocessing import MinMaxScaler
-
-
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.calibration import LabelEncoder
 from sklearn.preprocessing import TargetEncoder, OneHotEncoder
-from sklearn.impute import KNNImputer
+from sklearn.impute import KNNImputer, IterativeImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, PolynomialFeatures
 from sklearn.svm import SVR
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.linear_model import LinearRegression, Ridge, SGDRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.neighbors import KNeighborsRegressor
-
-
 from sklearn.pipeline import Pipeline
-
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error, median_absolute_error, root_mean_squared_error, mean_absolute_percentage_error
-
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.experimental import enable_iterative_imputer
 # ignore warnings
 import warnings
 warnings.filterwarnings('ignore')
 
-from sklearn.linear_model import ElasticNet
-from sklearn.compose import TransformedTargetRegressor
+
+
 
 
 #set random seed for reproducibility
@@ -89,7 +74,7 @@ def normalize_data(x):
     return x
 
 
-# Function that automatically looks for the closest match on the valid list, therefore correcting the visible typos.
+"Function that automatically looks for the closest match on the valid list, therefore correcting the visible typos."
 
 # In[16]:
 
@@ -124,9 +109,9 @@ def correct_missing_letters(value, valid_list, max_missing=2):
 
 valid_list = []
 
-
-# The remove_outliers function handles abnormal or extreme values in car data to prepare training, validation, and test sets for a machine learning model. It does this without removing any rows from the data, only changing the values within the columns where they are problematic. The treatment follows two main logics. The first is replacement with NaN for impossible or illogical values, for example, years of manufacture prior to 1990, engines with a displacement greater than 6 litres, and also strange combinations such as very new cars with excessively high mileage or large engines with unrealistically low fuel consumption. The problematic value in that cell is replaced with NaN, indicating that it is missing and will be handled later. The second logic is capping or limitation, which is applied to columns such as mileage, mpg consumption, and tax. In this case, instead of replacing values that are above a certain high percentile, such as 98% or 99%, with NaN calculated in the training set, they are cut off and replaced by this upper limit. For mpg, a cut-off is also made at the lower limit to avoid values close to zero or negative. This approach of cutting or replacing with NaN instead of removing the entire row ensures that the size of your training, validation, and test datasets remains the same, but with much cleaner and more consistent data, which is crucial for building a quality model.
-
+"""
+The remove_outliers function handles abnormal or extreme values in car data to prepare training, validation, and test sets for a machine learning model. It does this without removing any rows from the data, only changing the values within the columns where they are problematic. The treatment follows two main logics. The first is replacement with NaN for impossible or illogical values, for example, years of manufacture prior to 1990, engines with a displacement greater than 6 litres, and also strange combinations such as very new cars with excessively high mileage or large engines with unrealistically low fuel consumption. The problematic value in that cell is replaced with NaN, indicating that it is missing and will be handled later. The second logic is capping or limitation, which is applied to columns such as mileage, mpg consumption, and tax. In this case, instead of replacing values that are above a certain high percentile, such as 98% or 99%, with NaN calculated in the training set, they are cut off and replaced by this upper limit. For mpg, a cut-off is also made at the lower limit to avoid values close to zero or negative. This approach of cutting or replacing with NaN instead of removing the entire row ensures that the size of your training, validation, and test datasets remains the same, but with much cleaner and more consistent data, which is crucial for building a quality model.
+"""
 # In[ ]:
 
 
@@ -299,30 +284,20 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     return X_tr, X_v, X_tst, y_tr, y_v
 
 
-# Hybrid solution for filling in the missing values based on their statistical peers.
-# 
-# Explanation:
-# 
-# The pipeline begins with high-cardinality categorical variables. In the case of `model`, imputation is performed using global mode, since the categories are numerous and there is insufficient information for reliable conditional imputation. For `Brand`, the function takes a smarter approach: it first learns a model→brand mapping from the available data, and only then uses external reference lists to identify the correct brand when the model does not exist in the training sample. This step avoids systematic errors, such as associating an ‘Astra’ with BMW, and produces semantically consistent values. When no rule can resolve the missing value, the global mode is applied as a last resort.
-# 
-# This is followed by the imputation of conditional categorical variables, namely `fuelType` and `transmission`. Here, the function calculates the mode by logically relevant groups: for `fuelType` it uses the `brand`, and for `transmission` it uses the combination (`Brand`, `fuelType`), then resorts to the fallback for the mode by brand and finally to the global mode. This strategy respects actual patterns in the automotive market — for example, the fact that certain brands and fuel types tend to have consistent transmissions — avoiding random or structurally inconsistent imputations.
-# 
-# Binary variables, such as `has_reported_damage`, are imputed by mode, which is appropriate for attributes with only two possible states.
-# Before proceeding to numerical imputation, the function ensures that validation and testing do not introduce new categories that do not exist in the training data. Unknown categorical values are replaced by the mode of the respective column.
-# 
-# The most sophisticated step in the pipeline handles numeric variables with missing values using Iterative Imputer (MICE) with a RandomForestRegressor as the estimator. This method models each numeric variable with missing values as a function of the others, iteratively, capturing non-linear relationships and preserving important correlations between attributes — such as the relationship between vehicle age, mileage, engine size, or fuel consumption. In order for MICE to integrate categorical variables, these are temporarily converted into numerical codes consistent with the training values, ensuring consistency. After imputation, only the values of the numerical columns are replaced, keeping the original categories intact.
-# 
-# Finally, the function applies plausibility validations (‘clipping’). These limits ensure that the imputed values remain within the physically possible or commercially realistic range — for example, years between 1990 and 2025, engine capacity between 0.5L and 10L, mileage not negative and below the expected upper limit. This prevents subsequent models from dealing with absurd values or artefacts produced by iterative imputation.
-# 
-
+"""
+solution for filling in the missing values based on their statistical peers.
+Explanation: 
+The pipeline begins with high-cardinality categorical variables. In the case of `model`, imputation is performed using global mode, since the categories are numerous and there is insufficient information for reliable conditional imputation. For `Brand`, the function takes a smarter approach: it first learns a model→brand mapping from the available data, and only then uses external reference lists to identify the correct brand when the model does not exist in the training sample. This step avoids systematic errors, such as associating an ‘Astra’ with BMW, and produces semantically consistent values. When no rule can resolve the missing value, the global mode is applied as a last resort.
+This is followed by the imputation of conditional categorical variables, namely `fuelType` and `transmission`. Here, the function calculates the mode by logically relevant groups: for `fuelType` it uses the `brand`, and for `transmission` it uses the combination (`Brand`, `fuelType`), then resorts to the fallback for the mode by brand and finally to the global mode. This strategy respects actual patterns in the automotive market — for example, the fact that certain brands and fuel types tend to have consistent transmissions — avoiding random or structurally inconsistent imputations.
+Binary variables, such as `has_reported_damage`, are imputed by mode, which is appropriate for attributes with only two possible states.
+Before proceeding to numerical imputation, the function ensures that validation and testing do not introduce new categories that do not exist in the training data. Unknown categorical values are replaced by the mode of the respective column.
+The most sophisticated step in the pipeline handles numeric variables with missing values using Iterative Imputer (MICE) with a RandomForestRegressor as the estimator. This method models each numeric variable with missing values as a function of the others, iteratively, capturing non-linear relationships and preserving important correlations between attributes — such as the relationship between vehicle age, mileage, engine size, or fuel consumption. In order for MICE to integrate categorical variables, these are temporarily converted into numerical codes consistent with the training values, ensuring consistency. After imputation, only the values of the numerical columns are replaced, keeping the original categories intact. 
+Finally, the function applies plausibility validations (‘clipping’). These limits ensure that the imputed values remain within the physically possible or commercially realistic range — for example, years between 1990 and 2025, engine capacity between 0.5L and 10L, mileage not negative and below the expected upper limit. This prevents subsequent models from dealing with absurd values or artefacts produced by iterative imputation.
+"""
 # In[ ]:
 
 
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer
-from sklearn.ensemble import RandomForestRegressor
-import warnings
-warnings.filterwarnings('ignore')
+
 
 
 def impute_missing_values_hybrid(X_train, X_val, X_test):
@@ -902,10 +877,4 @@ def evaluate_model_rf_mae(X, y, model=None, scaler=None, fill_method=None):
     mae = mean_absolute_error(y, y_pred)
     
     return mae
-
-
-# In[ ]:
-
-
-#!jupyter nbconvert --to python functions.ipynb
 
