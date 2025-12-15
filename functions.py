@@ -180,7 +180,7 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     if 'mileage' in X_tr.columns:
         print(f"\n[MILEAGE]")
         
-        upper_mileage = X_train['mileage'].quantile(0.98)
+        upper_mileage = X_train['mileage'].quantile(0.95)
         train_above = (X_tr['mileage'] > upper_mileage).sum()
         val_above = (X_v['mileage'] > upper_mileage).sum()
         test_above = (X_tst['mileage'] > upper_mileage).sum()
@@ -197,7 +197,7 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     if 'mpg' in X_tr.columns:
         print(f"\n[MPG]")
         q_low = X_tr['mpg'].quantile(0.005)
-        q_high = X_tr['mpg'].quantile(0.98)
+        q_high = X_tr['mpg'].quantile(0.95)
         print(f" [{q_low:.1f}, {q_high:.1f}] MPG (0.5%–98%)")
         
         train_affected = ((X_tr['mpg'] < q_low) | (X_tr['mpg'] > q_high)).sum()
@@ -231,9 +231,9 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     if 'engineSize' in X_tr.columns:
         print(f"\n[ENGINE SIZE]")
         
-        mask_tr = ((X_tr['engineSize'] > 6.0) | (X_tr['engineSize'] < 0.5))
-        mask_v  = ((X_v['engineSize'] > 6.0)  | (X_v['engineSize'] < 0.5))
-        mask_tst = ((X_tst['engineSize'] > 6.0) | (X_tst['engineSize'] < 0.5))
+        mask_tr = ((X_tr['engineSize'] > 5.0) | (X_tr['engineSize'] < 0.5))
+        mask_v  = ((X_v['engineSize'] > 5.0)  | (X_v['engineSize'] < 0.5))
+        mask_tst = ((X_tst['engineSize'] > 5.0) | (X_tst['engineSize'] < 0.5))
         
         removed_tr = mask_tr.sum()
         removed_v = mask_v.sum()
