@@ -135,6 +135,14 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     Deals with outliers:
     -Train/Val/Test: Substitutes impossible values for NaN (does not remove rows)
     -Train/Val/Test: Caps extreme values
+    -year < 1990 → NaN 
+    -mileage > P98 → capped
+    -mpg < P0.5 or > P98 → capped
+    -tax > P98 → capped
+    -engineSize < 0.5 or > 6.0 → NaN
+    -Logical validations:
+        -new cars (year >= 2022) with mileage > 100,000 → NaN
+        -large engines (> 4.0L) with mpg > 60 → NaN
     Args:
         X_train: Training feature set.
         X_val: Validation feature set.
