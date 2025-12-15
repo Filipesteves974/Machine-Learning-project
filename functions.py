@@ -122,9 +122,9 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     -Train/Val/Test: Substitutes impossible values for NaN (does not remove rows)
     -Train/Val/Test: Caps extreme values
     -year < 1990 → NaN 
-    -mileage > P98 → capped
-    -mpg < P0.5 or > P98 → capped
-    -tax > P98 → capped
+    -mileage > P95 → capped
+    -mpg < P0.5 or > P95 → capped
+    -tax > P95 → capped
     -engineSize < 0.5 or > 6.0 → NaN
     -Logical validations:
         -new cars (year >= 2022) with mileage > 100,000 → NaN
