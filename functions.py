@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[14]:
 
 
 #general imports that we will need will almost always use - it is a good practice to import all libraries at the beginning of the notebook or script
@@ -69,7 +69,7 @@ np.random.seed(RSEED)
 
 # Transforms all data to fit the same criteria making it easier to work on.
 
-# In[2]:
+# In[15]:
 
 
 def normalize_data(x):
@@ -85,7 +85,7 @@ def normalize_data(x):
 
 # Function that automatically looks for the closest match on the valid list, therefore correcting the visible typos.
 
-# In[3]:
+# In[16]:
 
 
 def correct_missing_letters(value, valid_list, max_missing=2):
@@ -115,12 +115,12 @@ def correct_missing_letters(value, valid_list, max_missing=2):
 valid_list = []
 
 
-# Individually treats the outliers detected for each feature. Methods applied were Winsorization and removing by NaN placement
+# The remove_outliers_smart_v3 function handles abnormal or extreme values in car data to prepare training, validation, and test sets for a machine learning model. It does this without removing any rows from the data, only changing the values within the columns where they are problematic. The treatment follows two main logics. The first is replacement with NaN for impossible or illogical values, for example, years of manufacture prior to 1990, engines with a displacement greater than 6 litres, and also strange combinations such as very new cars with excessively high mileage or large engines with unrealistically low fuel consumption. The problematic value in that cell is replaced with NaN, indicating that it is missing and will be handled later. The second logic is capping or limitation, which is applied to columns such as mileage, mpg consumption, and tax. In this case, instead of replacing values that are above a certain high percentile, such as 98% or 99%, with NaN calculated in the training set, they are cut off and replaced by this upper limit. For mpg, a cut-off is also made at the lower limit to avoid values close to zero or negative. This approach of cutting or replacing with NaN instead of removing the entire row ensures that the size of your training, validation, and test datasets remains the same, but with much cleaner and more consistent data, which is crucial for building a quality model.
 
-# In[4]:
+# In[ ]:
 
 
-def remove_outliers_smart_v3(X_train, X_val, X_test, y_train, y_val):
+def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     """
     Trata outliers:
     - Train/Val/Test: Substitui valores impossíveis por NaN (não remove linhas)
@@ -156,7 +156,7 @@ def remove_outliers_smart_v3(X_train, X_val, X_test, y_train, y_val):
     if 'mileage' in X_tr.columns:
         print(f"\n[MILEAGE]")
         
-        upper_mileage = X_train['mileage'].quantile(0.99)
+        upper_mileage = X_train['mileage'].quantile(0.98)
         train_above = (X_tr['mileage'] > upper_mileage).sum()
         val_above = (X_v['mileage'] > upper_mileage).sum()
         test_above = (X_tst['mileage'] > upper_mileage).sum()
@@ -203,13 +203,13 @@ def remove_outliers_smart_v3(X_train, X_val, X_test, y_train, y_val):
         X_tst['tax'] = np.clip(X_tst['tax'], 0, upper_tax)
     
 
-    # ========== ENGINE SIZE > 6.0L ==========
+    # ========== ENGINE SIZE ==========
     if 'engineSize' in X_tr.columns:
         print(f"\n[ENGINE SIZE]")
         
-        mask_tr = X_tr['engineSize'] > 6.0
-        mask_v = X_v['engineSize'] > 6.0
-        mask_tst = X_tst['engineSize'] > 6.0
+        mask_tr = ((X_tr['engineSize'] > 6.0) | (X_tr['engineSize'] < 0.5))
+        mask_v  = ((X_v['engineSize'] > 6.0)  | (X_v['engineSize'] < 0.5))
+        mask_tst = ((X_tst['engineSize'] > 6.0) | (X_tst['engineSize'] < 0.5))
         
         removed_tr = mask_tr.sum()
         removed_v = mask_v.sum()
@@ -226,7 +226,7 @@ def remove_outliers_smart_v3(X_train, X_val, X_test, y_train, y_val):
     # ========== LOGIC VALIDATION ==========
     print(f"\n[Logic Validation]")
     
-    # Carros novos com quilometragem absurda
+    # new cars with high mileage (physically impossible)
     if 'year' in X_tr.columns and 'mileage' in X_tr.columns:
         current_year = 2025
         
@@ -243,9 +243,9 @@ def remove_outliers_smart_v3(X_train, X_val, X_test, y_train, y_val):
         X_tst.loc[mask_tst, 'year'] = np.nan
         
         if removed_tr > 0 or removed_v > 0 or removed_tst > 0:
-            print(f" Carros novos c/ alta quilometragem: {removed_tr} train, {removed_v} val, {removed_tst} test (→ NaN)")
+            print(f" New cars + high km: {removed_tr} train, {removed_v} val, {removed_tst} test (→ NaN)")
     
-    # Motores grandes com MPG alto (fisicamente impossível)
+    # large engine with high MPG (physically improbable)
     if 'mpg' in X_tr.columns and 'engineSize' in X_tr.columns:
         mask_tr = (X_tr['engineSize'] > 4.0) & (X_tr['mpg'] > 60)
         mask_v = (X_v['engineSize'] > 4.0) & (X_v['mpg'] > 60)
@@ -260,7 +260,7 @@ def remove_outliers_smart_v3(X_train, X_val, X_test, y_train, y_val):
         X_tst.loc[mask_tst, 'mpg'] = np.nan
         
         if removed_tr > 0 or removed_v > 0 or removed_tst > 0:
-            print(f" Motor grande c/ MPG alto: {removed_tr} train, {removed_v} val, {removed_tst} test (→ NaN)")
+            print(f" large engine + high mpg: {removed_tr} train, {removed_v} val, {removed_tst} test (→ NaN)")
     
 
     # ========== SUMMARY ==========
@@ -276,6 +276,20 @@ def remove_outliers_smart_v3(X_train, X_val, X_test, y_train, y_val):
 
 
 # Hybrid solution for filling in the missing values based on their statistical peers.
+# 
+# Explanation:
+# 
+# The pipeline begins with high-cardinality categorical variables. In the case of `model`, imputation is performed using global mode, since the categories are numerous and there is insufficient information for reliable conditional imputation. For `Brand`, the function takes a smarter approach: it first learns a model→brand mapping from the available data, and only then uses external reference lists to identify the correct brand when the model does not exist in the training sample. This step avoids systematic errors, such as associating an ‘Astra’ with BMW, and produces semantically consistent values. When no rule can resolve the missing value, the global mode is applied as a last resort.
+# 
+# This is followed by the imputation of conditional categorical variables, namely `fuelType` and `transmission`. Here, the function calculates the mode by logically relevant groups: for `fuelType` it uses the `brand`, and for `transmission` it uses the combination (`Brand`, `fuelType`), then resorts to the fallback for the mode by brand and finally to the global mode. This strategy respects actual patterns in the automotive market — for example, the fact that certain brands and fuel types tend to have consistent transmissions — avoiding random or structurally inconsistent imputations.
+# 
+# Binary variables, such as `has_reported_damage`, are imputed by mode, which is appropriate for attributes with only two possible states.
+# Before proceeding to numerical imputation, the function ensures that validation and testing do not introduce new categories that do not exist in the training data. Unknown categorical values are replaced by the mode of the respective column.
+# 
+# The most sophisticated step in the pipeline handles numeric variables with missing values using Iterative Imputer (MICE) with a RandomForestRegressor as the estimator. This method models each numeric variable with missing values as a function of the others, iteratively, capturing non-linear relationships and preserving important correlations between attributes — such as the relationship between vehicle age, mileage, engine size, or fuel consumption. In order for MICE to integrate categorical variables, these are temporarily converted into numerical codes consistent with the training values, ensuring consistency. After imputation, only the values of the numerical columns are replaced, keeping the original categories intact.
+# 
+# Finally, the function applies plausibility validations (‘clipping’). These limits ensure that the imputed values remain within the physically possible or commercially realistic range — for example, years between 1990 and 2025, engine capacity between 0.5L and 10L, mileage not negative and below the expected upper limit. This prevents subsequent models from dealing with absurd values or artefacts produced by iterative imputation.
+# 
 
 # In[ ]:
 
@@ -304,24 +318,46 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
     print("HYBRID IMPUTATION PIPELINE")
     print("="*80)
     
+    
+# =========================================================================
+    # STEP 1: MODEL (brand mode if Brand known, else global mode)
+    # =========================================================================
+    print("\n[1/6] MODEL - brand-aware mode + global fallback")
 
     
-    # =========================================================================
-    # STEP 1: MODEL (global mode)
-    # =========================================================================
-    print("\n[1/6] MODEL - global mode")
-    
     global_mode_model = X_tr["model"].mode()[0] if len(X_tr["model"].mode()) > 0 else "unknown"
-    
+
+   
     n_missing_train = X_tr["model"].isna().sum()
-    X_tr["model"].fillna(global_mode_model, inplace=True)
-    X_v["model"].fillna(global_mode_model, inplace=True)
-    X_te["model"].fillna(global_mode_model, inplace=True)
+
     
+    brand_to_model_mode = (
+        X_tr.dropna(subset=["Brand", "model"])
+            .groupby("Brand")["model"]
+            .agg(lambda x: x.mode()[0] if len(x.mode()) > 0 else None)
+            .to_dict()
+    )
+
+    def fill_model(df):
+        
+        miss_model = df["model"].isna()
+
+        
+        has_brand = df["Brand"].notna()
+        idx_brand = df.index[miss_model & has_brand]
+        df.loc[idx_brand, "model"] = df.loc[idx_brand, "Brand"].map(brand_to_model_mode)
+
+      
+        df["model"] = df["model"].fillna(global_mode_model)
+
+    
+    fill_model(X_tr)
+    fill_model(X_v)
+    fill_model(X_te)
+
     print(f"  Global mode: '{global_mode_model}'")
     print(f"  Imputed - Train: {n_missing_train}, Val: {X_val['model'].isna().sum()}, "
-          f"Test: {X_test['model'].isna().sum()}")
-    
+        f"Test: {X_test['model'].isna().sum()}")
     # =========================================================================
     # STEP 2: BRAND (inferred from model, then mode)
     # =========================================================================
@@ -635,7 +671,7 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
 
 # Chi2 test for feature importance in categorical variables.
 
-# In[6]:
+# In[19]:
 
 
 def TestIndependence(X,y,var,alpha=0.05):        
@@ -651,7 +687,7 @@ def TestIndependence(X,y,var,alpha=0.05):
 
 # Spearman correlation map function.
 
-# In[7]:
+# In[20]:
 
 
 def cor_heatmap(cor):
@@ -660,53 +696,9 @@ def cor_heatmap(cor):
     plt.show()
 
 
-# RFE
-
-# In[8]:
-
-
-def optimal_rfe(X, y, scoring='r2', cv=5, verbose=True):
-
-    model = LinearRegression()
-    n_features = X.shape[1]
-    scores = []
-
-    if verbose:
-        print("Trying features")
-
-    for n in range(1, n_features + 1):
-        rfe = RFE(model, n_features_to_select=n)
-        X_rfe = rfe.fit_transform(X, y)
-        score = np.mean(cross_val_score(model, X_rfe, y, scoring=scoring, cv=cv))
-        scores.append(score)
-
-        if verbose:
-            print(f"{n:2d} features -> {scoring}: {score:.4f}")
-
-    best_n = np.argmax(scores) + 1
-    best_score = scores[best_n - 1]
-
-    best_rfe = RFE(model, n_features_to_select=best_n)
-    best_rfe.fit(X, y)
-
-    feature_ranking = (
-        {feature: rank for feature, rank in zip(X.columns, best_rfe.ranking_)}
-        if hasattr(X, "columns")
-        else None
-    )
-
-    if verbose:
-        print("\nBest number of features:", best_n)
-        print("Best average score:", round(best_score, 4))
-        if feature_ranking:
-            print("Selected features:", X.columns[best_rfe.support_].tolist())
-
-    return best_rfe, best_n, best_score, feature_ranking
-
-
 # Lasso importance grid
 
-# In[9]:
+# In[22]:
 
 
 def plot_importance(coef,name):
@@ -719,43 +711,34 @@ def plot_importance(coef,name):
 
 # Model evaluation functions
 
-# In[10]:
+# In[ ]:
 
 
-def evaluate_model(model, X_train, X_val, y_train, y_val):
-    y_pred_train = model.predict(X_train)
-    y_pred_val = model.predict(X_val)
-    print("Validation set:")
-    print("R²:", r2_score(y_val, y_pred_val))
-    print("MAE:", mean_absolute_error(y_val, y_pred_val))
-    print("RMSE:", root_mean_squared_error(y_val, y_pred_val))
-    print("\nTraining set:")
-    print("R²:", r2_score(y_train, y_pred_train))
-    print("MAE:", mean_absolute_error(y_train, y_pred_train))
-    print("RMSE:", root_mean_squared_error(y_train, y_pred_train))
-    print("-" * 60)
+def compute_metrics(model, X, y, split):
+    y_pred = model.predict(X)
+    return {
+        "split": split,
+        "MAE": mean_absolute_error(y, y_pred),
+        "MedAE": median_absolute_error(y, y_pred),
+        "RMSE": root_mean_squared_error(y, y_pred),
+        "MAPE": mean_absolute_percentage_error(y, y_pred),
+        "R2": r2_score(y, y_pred),
+    }
 
-def evaluate_model_original_scale(model, X_train, X_val, y_train, y_val):
-    # predições em log
-    y_pred_train_log = model.predict(X_train)
-    y_pred_val_log = model.predict(X_val)
-
-    # voltar para a escala original
-    y_pred_train = np.exp(y_pred_train_log)
-    y_pred_val = np.exp(y_pred_val_log)
-
-    print("Validation set:")
-    print("R²:", r2_score(y_val, y_pred_val))
-    print("MAE:", mean_absolute_error(y_val, y_pred_val))
-    print("RMSE:", root_mean_squared_error(y_val, y_pred_val))
-    print("\nTraining set:")
-    print("R²:", r2_score(y_train, y_pred_train))
-    print("MAE:", mean_absolute_error(y_train, y_pred_train))
-    print("RMSE:", root_mean_squared_error(y_train, y_pred_train))
-    print("-" * 60)
+def compute_metrics_log(model, X, y, split):
+    y_pred_log = model.predict(X)
+    y_pred = np.exp(y_pred_log)
+    return {
+        "split": split,
+        "MAE": mean_absolute_error(y, y_pred),
+        "MedAE": median_absolute_error(y, y_pred),
+        "RMSE": root_mean_squared_error(y, y_pred),
+        "MAPE": mean_absolute_percentage_error(y, y_pred),
+        "R2": r2_score(y, y_pred),
+    }
 
 
-# In[11]:
+# In[24]:
 
 
 def run_model(X, y, scaler=None, model=None, fill_method=None):
@@ -800,7 +783,7 @@ def run_model(X, y, scaler=None, model=None, fill_method=None):
     return model, scaler, fill_values
 
 
-# In[12]:
+# In[25]:
 
 
 def evaluate_model_rf_mae(X, y, model=None, scaler=None, fill_method=None):
