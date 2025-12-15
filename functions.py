@@ -368,7 +368,10 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
     )
 
     def fill_model(df):
-        
+        """Fill missing model values.
+        Args:
+            df: DataFrame to process.
+        """
         miss_model = df["model"].isna()
 
         
@@ -430,6 +433,10 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
     seat_models = ["leon", "ateca", "toledo", "arona", "ibiza", "alhambra"]
     
     def infer_brand_smart(model_val):
+        """Infer Brand from model using learned mapping and hardcoded lists.
+        Args:
+            model_val: The model value to infer the brand for.
+        """
         if pd.isna(model_val):
             return None
         
@@ -482,6 +489,10 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
     global_mode_fueltype = X_tr["fuelType"].mode()[0] if len(X_tr["fuelType"].mode()) > 0 else "Petrol"
     
     def fill_fueltype(row):
+        """Fill missing fuelType based on Brand mode, else global mode.
+        Args:
+            row: DataFrame row to process.
+        """
         if pd.notna(row["fuelType"]):
             return row["fuelType"]
         val = mode_fueltype_brand.get(row["Brand"], global_mode_fueltype)
@@ -504,6 +515,11 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
     global_mode_transmission = X_tr["transmission"].mode()[0] if len(X_tr["transmission"].mode()) > 0 else "Manual"
     
     def fill_transmission(row):
+        """Fill missing transmission based on (Brand, fuelType) mode,
+        then Brand mode, else global mode.
+        Args:
+            row: DataFrame row to process.
+        """
         if pd.notna(row["transmission"]):
             return row["transmission"]
         val = mode_transmission_brandfuel.get((row["Brand"], row["fuelType"]))
@@ -703,7 +719,14 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
 # In[19]:
 
 
-def TestIndependence(X,y,var,alpha=0.05):        
+def TestIndependence(X,y,var,alpha=0.05): 
+    """
+    Perform Chi-squared test of independence between a categorical feature and the target.
+    Args:
+        X: Feature DataFrame.
+        y: Target Series.
+        var: Name of the categorical variable to test.
+        alpha: Significance level for the test."""       
     dfObserved = pd.crosstab(y,X) 
     chi2, p, dof, expected = stats.chi2_contingency(dfObserved.values)
     dfExpected = pd.DataFrame(expected, columns=dfObserved.columns, index = dfObserved.index)
@@ -720,6 +743,11 @@ def TestIndependence(X,y,var,alpha=0.05):
 
 
 def cor_heatmap(cor):
+    """
+    Plot a heatmap of the correlation matrix.
+    Args:
+        cor: Correlation matrix (DataFrame).
+    """
     plt.figure(figsize=(12,10))
     sns.heatmap(data = cor, annot = True, cmap = plt.cm.Purples, fmt='.1')
     plt.show()
@@ -731,6 +759,12 @@ def cor_heatmap(cor):
 
 
 def plot_importance(coef,name):
+    """
+    Plot feature importance from model coefficients.
+    Args:
+        coef: Series of model coefficients.
+        name: Name of the model (for title).
+    """
     imp_coef = coef.sort_values()
     plt.figure(figsize=(6,8))
     imp_coef.plot(kind = "barh", color='purple')
@@ -744,6 +778,16 @@ def plot_importance(coef,name):
 
 
 def compute_metrics(model, X, y, split):
+    """
+    Compute evaluation metrics for a regression model.
+    Args:
+        model: Fitted regression model.
+        X: Features for prediction.
+        y: True target values.
+        split: Data split identifier (e.g., 'train', 'val', 'test').
+    Returns:
+        Dictionary of evaluation metrics.
+    """
     y_pred = model.predict(X)
     return {
         "split": split,
@@ -755,6 +799,16 @@ def compute_metrics(model, X, y, split):
     }
 
 def compute_metrics_log(model, X, y, split):
+    """
+    Compute evaluation metrics for a regression model with log-transformed target.
+    Args:
+        model: Fitted regression model.
+        X: Features for prediction.
+        y: True target values (original scale).
+        split: Data split identifier (e.g., 'train', 'val', 'test').
+    Returns:
+        Dictionary of evaluation metrics.
+    """
     y_pred_log = model.predict(X)
     y_pred = np.exp(y_pred_log)
     return {
