@@ -73,6 +73,12 @@ np.random.seed(RSEED)
 
 
 def normalize_data(x):
+    """ 
+    Normalizes string data by converting to lowercase and removing underscores, hyphens, and spaces. 
+    Converts 'nan' strings to actual NaN values.
+    Args:
+        x: The input string to normalize.
+    """
     x = str(x)
     x = x.lower()
     x = x.replace("_", "")
@@ -90,19 +96,23 @@ def normalize_data(x):
 
 def correct_missing_letters(value, valid_list, max_missing=2):
     """
-    corrects values with missing letters based on valid_list
+    Corrects values with missing letters based on valid_list
+    Args:
+        value: The input string to correct.
+        valid_list: The list of valid strings to match against.
+        max_missing: The maximum number of missing letters allowed.
     """
     best_match = value
     smallest_diff = 999
-    if pd.isna(value):  # <- ignores NaN
+    if pd.isna(value):  # ignores NaN
         return np.nan
     for ref in valid_list:
         # absolute length difference
         len_diff = abs(len(ref) - len(value))
         if len_diff == 0 or len_diff > max_missing:
-            continue  # ignora se igual ou diferença > limite
+            continue  # ignores if equal or difference > limit
 
-        # verificar se o valor é subsequência do nome correto (mantendo ordem)
+        # check if the value is a subsequence of the correct name (maintaining order)
         it = iter(ref)
         is_subseq = all(ch in it for ch in value)
 
@@ -115,16 +125,22 @@ def correct_missing_letters(value, valid_list, max_missing=2):
 valid_list = []
 
 
-# The remove_outliers_smart_v3 function handles abnormal or extreme values in car data to prepare training, validation, and test sets for a machine learning model. It does this without removing any rows from the data, only changing the values within the columns where they are problematic. The treatment follows two main logics. The first is replacement with NaN for impossible or illogical values, for example, years of manufacture prior to 1990, engines with a displacement greater than 6 litres, and also strange combinations such as very new cars with excessively high mileage or large engines with unrealistically low fuel consumption. The problematic value in that cell is replaced with NaN, indicating that it is missing and will be handled later. The second logic is capping or limitation, which is applied to columns such as mileage, mpg consumption, and tax. In this case, instead of replacing values that are above a certain high percentile, such as 98% or 99%, with NaN calculated in the training set, they are cut off and replaced by this upper limit. For mpg, a cut-off is also made at the lower limit to avoid values close to zero or negative. This approach of cutting or replacing with NaN instead of removing the entire row ensures that the size of your training, validation, and test datasets remains the same, but with much cleaner and more consistent data, which is crucial for building a quality model.
+# The remove_outliers function handles abnormal or extreme values in car data to prepare training, validation, and test sets for a machine learning model. It does this without removing any rows from the data, only changing the values within the columns where they are problematic. The treatment follows two main logics. The first is replacement with NaN for impossible or illogical values, for example, years of manufacture prior to 1990, engines with a displacement greater than 6 litres, and also strange combinations such as very new cars with excessively high mileage or large engines with unrealistically low fuel consumption. The problematic value in that cell is replaced with NaN, indicating that it is missing and will be handled later. The second logic is capping or limitation, which is applied to columns such as mileage, mpg consumption, and tax. In this case, instead of replacing values that are above a certain high percentile, such as 98% or 99%, with NaN calculated in the training set, they are cut off and replaced by this upper limit. For mpg, a cut-off is also made at the lower limit to avoid values close to zero or negative. This approach of cutting or replacing with NaN instead of removing the entire row ensures that the size of your training, validation, and test datasets remains the same, but with much cleaner and more consistent data, which is crucial for building a quality model.
 
 # In[ ]:
 
 
 def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     """
-    Trata outliers:
-    - Train/Val/Test: Substitui valores impossíveis por NaN (não remove linhas)
-    - Train/Val/Test: Faz capping em valores extremos
+    Deals with outliers:
+    -Train/Val/Test: Substitutes impossible values for NaN (does not remove rows)
+    -Train/Val/Test: Caps extreme values
+    Args:
+        X_train: Training feature set.
+        X_val: Validation feature set.
+        X_test: Test feature set.
+        y_train: Training target variable.
+        y_val: Validation target variable.
     """
     X_tr = X_train.copy()
     X_v = X_val.copy()
@@ -309,6 +325,11 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
     3. Binary flags: has_damage, has_reported_damage (mode)
     4. Correlated numerical: IterativeImputer (MICE)
     5. Optional flags to indicate imputed values
+    6. Plausibility clipping
+    Args:
+        X_train: Training feature set.
+        X_val: Validation feature set.
+        X_test: Test feature set.
     """
     X_tr = X_train.copy()
     X_v = X_val.copy()
