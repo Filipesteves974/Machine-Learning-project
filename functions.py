@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 import time
+from sklearn.experimental import enable_iterative_imputer
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import StratifiedKFold
 import scipy.stats as stats
@@ -39,6 +40,8 @@ from sklearn.metrics import accuracy_score, classification_report
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error, median_absolute_error, root_mean_squared_error, mean_absolute_percentage_error
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.experimental import enable_iterative_imputer
+from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import StandardScaler
 # ignore warnings
 import warnings
 warnings.filterwarnings('ignore')
@@ -121,9 +124,9 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     -Train/Val/Test: Substitutes impossible values for NaN (does not remove rows)
     -Train/Val/Test: Caps extreme values
     -year < 1990 → NaN 
-    -mileage > P98 → capped
-    -mpg < P0.5 or > P98 → capped
-    -tax > P98 → capped
+    -mileage > P95 → capped
+    -mpg < P0.5 or > P95 → capped
+    -tax > P95 → capped
     -engineSize < 0.5 or > 6.0 → NaN
     -Logical validations:
         -new cars (year >= 2022) with mileage > 100,000 → NaN
@@ -143,7 +146,7 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     
     
     # ========== YEAR < 1990 ==========
-    if 'year' in X_tr.columns:
+    """if 'year' in X_tr.columns:
         mask_tr = X_tr['year'] < 1990
         mask_v = X_v['year'] < 1990
         mask_tst = X_tst['year'] < 1990
@@ -158,14 +161,14 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
         
         if removed_tr > 0 or removed_v > 0 or removed_tst > 0:
             print(f"\n[YEAR < 1990]")
-            print(f" {removed_tr} train, {removed_v} val, {removed_tst} test (→ NaN)")
+            print(f" {removed_tr} train, {removed_v} val, {removed_tst} test (→ NaN)")"""
     
 
     # ========== MILEAGE (Capping) ==========
     if 'mileage' in X_tr.columns:
         print(f"\n[MILEAGE]")
         
-        upper_mileage = X_train['mileage'].quantile(0.95)
+        upper_mileage = X_train['mileage'].quantile(0.99)
         train_above = (X_tr['mileage'] > upper_mileage).sum()
         val_above = (X_v['mileage'] > upper_mileage).sum()
         test_above = (X_tst['mileage'] > upper_mileage).sum()
@@ -216,9 +219,9 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     if 'engineSize' in X_tr.columns:
         print(f"\n[ENGINE SIZE]")
         
-        mask_tr = ((X_tr['engineSize'] > 5.0) | (X_tr['engineSize'] < 0.5))
-        mask_v  = ((X_v['engineSize'] > 5.0)  | (X_v['engineSize'] < 0.5))
-        mask_tst = ((X_tst['engineSize'] > 5.0) | (X_tst['engineSize'] < 0.5))
+        mask_tr = ((X_tr['engineSize'] < 0.5))
+        mask_v  = ((X_v['engineSize'] < 0.5))
+        mask_tst = ((X_tst['engineSize'] < 0.5))
         
         removed_tr = mask_tr.sum()
         removed_v = mask_v.sum()
@@ -301,7 +304,7 @@ Finally, the function applies plausibility validations (‘clipping’). These l
 
 
 def impute_missing_values_hybrid(X_train, X_val, X_test):
-    """
+    '''
     Hybrid intelligent imputation:
     1. Simple categorical: model, Brand (rules + mode)
     2. Conditional categorical: fuelType, transmission (mode by group)
@@ -313,7 +316,8 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
         X_train: Training feature set.
         X_val: Validation feature set.
         X_test: Test feature set.
-    """
+    '''
+    
     X_tr = X_train.copy()
     X_v = X_val.copy()
     X_te = X_test.copy()
@@ -326,6 +330,7 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
 # =========================================================================
     # STEP 1: MODEL (brand mode if Brand known, else global mode)
     # =========================================================================
+    '''
     print("\n[1/6] MODEL - brand-aware mode + global fallback")
 
     
@@ -556,15 +561,13 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
             if n_unknown_test > 0:
                 X_te.loc[mask_unknown_test, col] = mode_val
                 print(f"  {col} - Test: {n_unknown_test} unknown values -> '{mode_val}'")
-    
+    '''
     # =========================================================================
     # STEP 5: CORRELATED NUMERICAL - IterativeImputer (MICE)
     # =========================================================================
     print("\n[5/6] NUMERICAL - IterativeImputer (MICE)")
     
     numeric_cols = ['year', 'engineSize', 'mileage', 'mpg', 'tax', 'previousOwners']
-    if 'paintQuality%' in X_tr.columns:
-        numeric_cols.append('paintQuality%')
     
     # Check which have missing
     numeric_cols_with_missing = [col for col in numeric_cols 
@@ -633,11 +636,11 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
     # Sanity corrections
     if 'year' in X_tr.columns:
         for df in [X_tr, X_v, X_te]:
-            df['year'] = df['year'].clip(lower=1990, upper=2025)
+            df['year'] = df['year'].clip(upper=2025)
     
     if 'engineSize' in X_tr.columns:
         for df in [X_tr, X_v, X_te]:
-            df['engineSize'] = df['engineSize'].clip(lower=0.5, upper=10.0)
+            df['engineSize'] = df['engineSize'].clip(lower=0.5)
     
     if 'mileage' in X_tr.columns:
         for df in [X_tr, X_v, X_te]:
@@ -654,10 +657,6 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
     if 'previousOwners' in X_tr.columns:
         for df in [X_tr, X_v, X_te]:
             df['previousOwners'] = df['previousOwners'].clip(lower=0, upper=10).round()
-    
-    if 'paintQuality%' in X_tr.columns:
-        for df in [X_tr, X_v, X_te]:
-            df['paintQuality%'] = df['paintQuality%'].clip(lower=0, upper=100)
     
     print(f"  Limits applied")
     
@@ -687,6 +686,81 @@ def impute_missing_values_hybrid(X_train, X_val, X_test):
     
     return X_tr, X_v, X_te
 
+
+def impute_knn_categorical(X_train, X_val, X_test):
+    # =========================================================================
+    # STEP 3.25: kNN CATEGORICAL (leakage-safe)
+    # =========================================================================
+    print("\n[3.25/6] kNN CATEGORICAL IMPUTATION (train-only)")
+
+    
+
+    # Categóricas a refinar com kNN (opcional)
+    knn_cat_cols = ['fuelType', 'transmission', 'Brand', 'model']
+    knn_num_cols = ['year', 'engineSize', 'mileage', 'mpg', 'tax']
+
+    knn_cat_cols = [c for c in knn_cat_cols if c in X_train.columns]
+    knn_num_cols = [c for c in knn_num_cols if c in X_train.columns]
+
+    if knn_cat_cols and knn_num_cols:
+
+        # Escalar numéricas (fit só no treino)
+        scaler_knn = StandardScaler()
+        X_tr_num_scaled = scaler_knn.fit_transform(X_train[knn_num_cols])
+        X_v_num_scaled  = scaler_knn.transform(X_val[knn_num_cols])
+        X_te_num_scaled = scaler_knn.transform(X_test[knn_num_cols])
+
+        # Base kNN: apenas linhas completas do treino
+        mask_complete = X_train[knn_cat_cols + knn_num_cols].notna().all(axis=1)
+
+        X_knn_base = X_train.loc[mask_complete, knn_cat_cols + knn_num_cols].copy()
+        X_knn_num_base = scaler_knn.transform(X_knn_base[knn_num_cols])
+
+        # Codificar categorias como códigos (apenas treino)
+        cat_maps = {}
+        for col in knn_cat_cols:
+            X_knn_base[col] = X_knn_base[col].astype('category')
+            cat_maps[col] = X_knn_base[col].cat.categories
+            X_knn_base[col] = X_knn_base[col].cat.codes
+
+        X_knn_matrix = np.hstack([X_knn_num_base, X_knn_base[knn_cat_cols].values])
+
+        knn = NearestNeighbors(n_neighbors=5, metric='euclidean')
+        knn.fit(X_knn_matrix)
+
+        def knn_impute(df, df_num_scaled, name):
+            n_imputed = 0
+
+            for col in knn_cat_cols:
+                for idx in df[df[col].isna()].index:
+
+                    row_num = df_num_scaled[df.index.get_loc(idx)].reshape(1, -1)
+
+                    dummy_cat = np.zeros((1, len(knn_cat_cols)))
+                    row_vec = np.hstack([row_num, dummy_cat])
+
+                    _, neighbors = knn.kneighbors(row_vec)
+                    neigh_vals = X_knn_base.iloc[neighbors[0]][col]
+                    neigh_vals = neigh_vals[neigh_vals >= 0]
+
+                    if len(neigh_vals) > 0:
+                        code = neigh_vals.mode()[0]
+                        df.at[idx, col] = cat_maps[col][code]
+                    else:
+                        df.at[idx, col] = X_train[col].mode()[0]
+
+                    n_imputed += 1
+
+            print(f"  {name}: {n_imputed} values imputed via kNN")
+
+        knn_impute(X_train, X_tr_num_scaled, "Train")
+        knn_impute(X_val,  X_v_num_scaled,  "Val")
+        knn_impute(X_test, X_te_num_scaled, "Test")
+
+    else:
+        print("  Skipped (missing required columns)")
+
+    return X_train, X_val, X_test
 
 
 # Chi2 test for feature importance in categorical variables.
