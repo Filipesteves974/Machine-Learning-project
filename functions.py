@@ -144,7 +144,7 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     
     
     # ========== YEAR < 1990 ==========
-    if 'year' in X_tr.columns:
+    """if 'year' in X_tr.columns:
         mask_tr = X_tr['year'] < 1990
         mask_v = X_v['year'] < 1990
         mask_tst = X_tst['year'] < 1990
@@ -159,7 +159,7 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
         
         if removed_tr > 0 or removed_v > 0 or removed_tst > 0:
             print(f"\n[YEAR < 1990]")
-            print(f" {removed_tr} train, {removed_v} val, {removed_tst} test (→ NaN)")
+            print(f" {removed_tr} train, {removed_v} val, {removed_tst} test (→ NaN)")"""
     
 
     # ========== MILEAGE (Capping) ==========
@@ -217,9 +217,9 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     if 'engineSize' in X_tr.columns:
         print(f"\n[ENGINE SIZE]")
         
-        mask_tr = ((X_tr['engineSize'] > 5.0) | (X_tr['engineSize'] < 0.5))
-        mask_v  = ((X_v['engineSize'] > 5.0)  | (X_v['engineSize'] < 0.5))
-        mask_tst = ((X_tst['engineSize'] > 5.0) | (X_tst['engineSize'] < 0.5))
+        mask_tr = ((X_tr['engineSize'] < 0.5))
+        mask_v  = ((X_v['engineSize'] < 0.5))
+        mask_tst = ((X_tst['engineSize'] < 0.5))
         
         removed_tr = mask_tr.sum()
         removed_v = mask_v.sum()
