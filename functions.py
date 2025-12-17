@@ -8,49 +8,24 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy import stats
 import seaborn as sns
-import os
-import time
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import StratifiedKFold
-import scipy.stats as stats
-from scipy.stats import chi2_contingency
-from sklearn.linear_model import LinearRegression
-from sklearn.svm import SVC
-from sklearn.feature_selection import RFE
-from sklearn.model_selection import cross_val_score
-from sklearn.linear_model import lasso_path, SGDRegressor
-from sklearn.linear_model import LassoCV, ElasticNet
-from sklearn.preprocessing import StandardScaler,RobustScaler
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-from sklearn.calibration import LabelEncoder
-from sklearn.preprocessing import TargetEncoder, OneHotEncoder
-from sklearn.impute import KNNImputer, IterativeImputer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler, PolynomialFeatures
-from sklearn.svm import SVR
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.linear_model import LinearRegression, Ridge, SGDRegressor
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score, classification_report
-from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error, median_absolute_error, root_mean_squared_error, mean_absolute_percentage_error
-from sklearn.compose import TransformedTargetRegressor
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.neighbors import NearestNeighbors
+
 from sklearn.preprocessing import StandardScaler
+
+from sklearn.impute import IterativeImputer
+
+from sklearn.ensemble import RandomForestRegressor
+
+from sklearn.metrics import r2_score, mean_absolute_error, median_absolute_error, root_mean_squared_error, mean_absolute_percentage_error
+
+from sklearn.neighbors import NearestNeighbors
+
 from difflib import SequenceMatcher, get_close_matches
-from collections import Counter
+
 # ignore warnings
 import warnings
 warnings.filterwarnings('ignore')
-
-
-
-
 
 #set random seed for reproducibility
 RSEED = 42
@@ -299,14 +274,10 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     Deals with outliers:
     -Train/Val/Test: Substitutes impossible values for NaN (does not remove rows)
     -Train/Val/Test: Caps extreme values
-    -year < 1990 → NaN 
-    -mileage > P95 → capped
+    -mileage > P99 → capped
     -mpg < P0.5 or > P95 → capped
-    -tax > P95 → capped
-    -engineSize < 0.5 or > 6.0 → NaN
-    -Logical validations:
-        -new cars (year >= 2022) with mileage > 100,000 → NaN
-        -large engines (> 4.0L) with mpg > 60 → NaN
+    -tax > P98 → capped
+    -engineSize < 0.5L → NaN
     Args:
         X_train: Training feature set.
         X_val: Validation feature set.
@@ -320,24 +291,6 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
     y_tr = y_train.copy()
     y_v = y_val.copy()
     
-    
-    # ========== YEAR < 1990 ==========
-    """if 'year' in X_tr.columns:
-        mask_tr = X_tr['year'] < 1990
-        mask_v = X_v['year'] < 1990
-        mask_tst = X_tst['year'] < 1990
-        
-        removed_tr = mask_tr.sum()
-        removed_v = mask_v.sum()
-        removed_tst = mask_tst.sum()
-        
-        X_tr.loc[mask_tr, 'year'] = np.nan
-        X_v.loc[mask_v, 'year'] = np.nan
-        X_tst.loc[mask_tst, 'year'] = np.nan
-        
-        if removed_tr > 0 or removed_v > 0 or removed_tst > 0:
-            print(f"\n[YEAR < 1990]")
-            print(f" {removed_tr} train, {removed_v} val, {removed_tst} test (→ NaN)")"""
     
 
     # ========== MILEAGE (Capping) ==========
@@ -411,53 +364,13 @@ def remove_outliers(X_train, X_val, X_test, y_train, y_val):
             print(f" Engine > 6.0L: {removed_tr} train, {removed_v} val, {removed_tst} test (→ NaN)")
     
 
-    # ========== LOGIC VALIDATION ==========
-    print(f"\n[Logic Validation]")
-    
-    # new cars with high mileage (physically impossible)
-    if 'year' in X_tr.columns and 'mileage' in X_tr.columns:
-        current_year = 2025
-        
-        mask_tr = (current_year - X_tr['year'] <= 3) & (X_tr['mileage'] > 100000)
-        mask_v = (current_year - X_v['year'] <= 3) & (X_v['mileage'] > 100000)
-        mask_tst = (current_year - X_tst['year'] <= 3) & (X_tst['mileage'] > 100000)
-        
-        removed_tr = mask_tr.sum()
-        removed_v = mask_v.sum()
-        removed_tst = mask_tst.sum()
-        
-        X_tr.loc[mask_tr, 'year'] = np.nan
-        X_v.loc[mask_v, 'year'] = np.nan
-        X_tst.loc[mask_tst, 'year'] = np.nan
-        
-        if removed_tr > 0 or removed_v > 0 or removed_tst > 0:
-            print(f" New cars + high km: {removed_tr} train, {removed_v} val, {removed_tst} test (→ NaN)")
-    
-    # large engine with high MPG (physically improbable)
-    if 'mpg' in X_tr.columns and 'engineSize' in X_tr.columns:
-        mask_tr = (X_tr['engineSize'] > 4.0) & (X_tr['mpg'] > 60)
-        mask_v = (X_v['engineSize'] > 4.0) & (X_v['mpg'] > 60)
-        mask_tst = (X_tst['engineSize'] > 4.0) & (X_tst['mpg'] > 60)
-        
-        removed_tr = mask_tr.sum()
-        removed_v = mask_v.sum()
-        removed_tst = mask_tst.sum()
-        
-        X_tr.loc[mask_tr, 'mpg'] = np.nan
-        X_v.loc[mask_v, 'mpg'] = np.nan
-        X_tst.loc[mask_tst, 'mpg'] = np.nan
-        
-        if removed_tr > 0 or removed_v > 0 or removed_tst > 0:
-            print(f" large engine + high mpg: {removed_tr} train, {removed_v} val, {removed_tst} test (→ NaN)")
-    
-
     # ========== SUMMARY ==========
     print("\n" + "="*60)
     print("="*60)
-    print(f"Mantidos: {len(X_tr)} train (100.0%), "
+    print(f"Kept {len(X_tr)} train (100.0%), "
           f"{len(X_v)} val (100.0%), "
           f"{len(X_tst)} test (100.0%)")
-    print(f"Nenhuma linha removida - valores impossíveis substituídos por NaN")
+    print(f"Impossible values replaced by NaN")
     print("="*60 + "\n")
     
     return X_tr, X_v, X_tst, y_tr, y_v
@@ -669,9 +582,8 @@ def impute_knn_categorical(X_train, X_val, X_test):
     - Val/Test are only transformed and queried; they never influence training mappings.
     """
 
-    # =========================================================================
-    # STEP 3.25: kNN CATEGORICAL IMPUTATION (train-only)
-    # =========================================================================
+
+    # kNN CATEGORICAL IMPUTATION (train-only)
     print("\n[3.25/6] kNN CATEGORICAL IMPUTATION (train-only)")
 
     # Categorical columns we want to impute/refine using kNN
@@ -913,49 +825,6 @@ def compute_metrics_log(model, X, y, split):
 
 
 # In[24]:
-
-
-def run_model(X, y, scaler=None, model=None, fill_method=None):
-    """
-    Train a model with optional preprocessing.
-    
-    Parameters:
-    - X: Features (will be copied to avoid modifying original)
-    - y: Target
-    - scaler: Scaler instance (e.g., StandardScaler()) or None for no scaling
-    - model: Model instance or None for LogisticRegression default
-    - fill_method: 'median', 'mean', or None for no filling
-    
-    Returns:
-    - model: Fitted model
-    - scaler: Fitted scaler (or None)
-    - fill_values: Dictionary of fill values (or None)
-    """
-    # Copy to avoid modifying original data
-    X_processed = X.copy()
-    
-    # Fill missing values - this function uses simple statistics from the training set but you can modify it to use more complex strategies
-    fill_values = None
-    if fill_method is not None:
-        if fill_method == 'function':
-            fill_values = impute_missing_values_hybrid(X_processed)
-        elif fill_method == 'mean':
-            fill_values = X_processed.mean()
-        X_processed = X_processed.fillna(fill_values)
-    
-    # Scale features
-    if scaler is not None:
-        X_processed = scaler.fit_transform(X_processed)
-    
-    # Use provided model or create default
-    if model is None:
-        model = RandomForestRegressor()
-    
-    # Fit the model
-    model.fit(X_processed, y)
-    
-    return model, scaler, fill_values
-
 
 # In[25]:
 
